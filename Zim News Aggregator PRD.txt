@@ -1,0 +1,585 @@
+﻿Product Requirements Document: Zim Top News Aggregator
+1. Vision and Executive Summary
+1.1. Product Overview
+This document outlines the comprehensive Product Requirements for the "Zim Top News Aggregator," a sophisticated digital platform engineered to consolidate, rank, and analyze news content from across the entirety of the Zimbabwean media landscape. The project is envisioned as a dual-component system comprising a robust, scalable back-end data ingestion and processing engine, and a modern, user-centric front-end website.
+The back-end infrastructure will feature an automated web scraping and content ingestion system capable of pulling data from a diverse array of news sources. This system will be manageable via a dedicated administrative interface. All aggregated content will be stored in a structured, high-performance database and made accessible through a well-defined Application Programming Interface (API).
+The front-end website will serve as the public face of the platform, presenting the aggregated news in a clean, intuitive, and engaging manner. It will feature a dynamic "Trending News" section powered by a proprietary algorithm, user engagement tools such as likes and upvotes, and unique content discovery pages organized by category and journalist.
+The core mission of the Zim Top News Aggregator is to provide Zimbabwean and international audiences with a single, comprehensive, and trustworthy source for news. By centralizing disparate information streams and providing novel analytical tools like the "Journalist Trust Score," the platform aims to overcome the challenges of information fragmentation, foster greater media literacy, and offer unparalleled insight into the events shaping Zimbabwe.
+1.2. Strategic Fit and Market Opportunity
+The strategic imperative for the Zim Top News Aggregator stems directly from the unique characteristics of the Zimbabwean information ecosystem. The country's news landscape is notably diverse and deeply polarized, featuring a spectrum of outlets that range from state-owned publications like The Herald and The Chronicle to a vibrant sector of independent newspapers such as NewsDay and The Standard, and influential diaspora-run digital sites like New Zimbabwe and Nehanda Radio. This fragmentation, while indicative of a dynamic media environment, presents a significant challenge for the average news consumer, who must navigate multiple sources to form a complete picture of any given event. This creates a clear and pressing market need for a sophisticated aggregator capable of bringing these disparate voices together into a single, coherent feed.
+The platform's value proposition is to move beyond simple aggregation and offer contextual intelligence. While generic global platforms like Google News provide broad coverage, they lack the specific focus and nuanced understanding required to properly contextualize Zimbabwean news. Zim Top News will differentiate itself by embedding this local context directly into its features. A fundamental characteristic of the Zimbabwean media is the dichotomy between state-controlled and independent reporting. A basic aggregator would mix these sources indiscriminately, failing to inform the user about the perspective or potential bias of the information they are consuming. This platform will capture "Source Affiliation" (e.g., State, Independent, Diaspora) as a core metadata point. This transforms the product from a simple feed into an analytical tool, allowing users to filter by perspective and understand the full spectrum of reporting on an issue. This contextual layer, combined with unique features like the Journalist Trust Score and a tailored trending algorithm, establishes a powerful unique selling proposition (USP) that cannot be matched by generic competitors.
+The target audience for this platform is twofold:
+* Primary Audience: Zimbabweans, both within the country and in the global diaspora, who are seeking a comprehensive, convenient, and reliable way to stay informed about national affairs. This group desires a one-stop-shop that saves them time and helps them navigate the complex media environment.
+* Secondary Audience: A diverse group of international stakeholders, including journalists, academic researchers, non-governmental organizations (NGOs), foreign diplomats, and business investors. For this audience, the platform serves as an essential intelligence tool, providing timely, organized, and context-rich data on the political, economic, and social landscape of Zimbabwe.
+2. System Architecture and Technical Foundation
+2.1. Recommended Architectural Model: Microservices
+A microservices architecture is mandated for the development of the Zim Top News Aggregator. While a traditional monolithic architecture offers simplicity in the initial stages of development and deployment, the distinct and functionally independent domains of this project—content ingestion, user management, feed generation, and algorithmic analysis—make it an ideal candidate for a more modern, distributed approach. The selection of a microservices model is a strategic decision to ensure long-term scalability, resilience, and technological agility, which are paramount for a successful and growing digital news platform.
+The inherent modularity of microservices provides critical advantages for this specific application. The project's components have vastly different operational profiles. The content scraping and ingestion service, for instance, is a background process that will run periodically and may be resource-intensive. The user-facing website and its API, conversely, must maintain high availability and low latency at all times. In a monolithic system, a bug or performance spike in the scraper could degrade or even crash the entire application, directly impacting the user experience. A microservices architecture isolates these functions. The IngestionService can be scaled up or down independently based on the number of sources and scraping frequency, without affecting the performance of the WebAppService. Similarly, the RankingService, which will execute the computationally complex trending and trust score algorithms, can be allocated dedicated resources to ensure its calculations do not introduce latency into user-facing API calls.
+This separation of concerns, facilitated by a central API Gateway, also accelerates development by allowing different teams to work on different services in parallel using the technology best suited for the task. For example, the IngestionService can be built in Python using specialized libraries like Scrapy and BeautifulSoup, while the APIService might use Node.js for its high-performance, non-blocking I/O capabilities. This approach future-proofs the platform, making it easier to update, replace, or add new services as the product evolves.
+The proposed architecture will consist of the following core, independently deployable services:
+* API Gateway: This will be the single, unified entry point for all client requests from the web and mobile applications. It will be responsible for request routing to the appropriate downstream service, handling user authentication and authorization (validating JWTs), rate limiting to prevent abuse, and aggregating responses. Solutions like Kong or an AWS API Gateway are recommended.
+* User Service: This service will be the sole authority for all user-related concerns. It will manage user registration, secure login via password hashing, profile data management, and user preferences (e.g., followed categories or journalists).
+* Ingestion Service: This service is the heart of the content acquisition pipeline. It will contain the web scraper bot, the RSS/Atom feed parser, and the scraper management front-end. Its responsibilities include fetching raw article data, performing initial cleaning and normalization, and publishing the structured data to a message queue for further processing.
+* Article Service: This service acts as the persistence layer for all core content. It will consume normalized article data from the message queue and be responsible for all CRUD (Create, Read, Update, Delete) operations related to articles, sources, journalists, and categories within the primary database. It will also handle deduplication logic.
+* Ranking & Analytics Service: This service is the computational engine of the platform. It will process engagement signals (likes, upvotes, shares) received from the message queue and periodically execute the "Trending Score" and "Journalist Trust Score" algorithms. It will update the respective scores in the database.
+* Feed Service: This service is responsible for constructing the various news feeds presented to the user. It will query the Article Service and Ranking & Analytics Service to assemble feeds such as the main trending feed, category-specific feeds, and journalist-specific feeds, applying any user-specific personalization rules.
+2.2. Data Ingestion Pipeline
+The data ingestion pipeline is designed for robustness, scalability, and ethical operation. It will be a multi-stage process that begins with data acquisition and ends with normalized, ready-to-serve content in the database.
+* Scraper Bot and Data Sources: The primary data acquisition tool will be a custom-built scraper bot, developed in Python using established libraries such as BeautifulSoup for HTML parsing and Requests for HTTP calls. The system will be designed to ingest content from three distinct source types to ensure comprehensive coverage:
+   1. Direct Web Scraping: For sources that do not provide structured feeds. The scraper will be configured with specific CSS selectors to extract the required fields: article_url, headline, article_snippet (e.g., the first 250 characters of the article body), image_url, source_name, author_name, and publication_date.
+   2. RSS/Atom Feeds: For sources that offer them, the system will use a dedicated parser library like feedparser to efficiently ingest structured data, reducing the complexity and brittleness associated with direct scraping.
+   3. Third-Party News APIs: To augment coverage and access premium content, the system will be designed to integrate with commercial news APIs like NewsAPI, which provide aggregated, pre-formatted data from a vast number of sources.
+* Scraper Management UI: A secure, administrator-only web interface will be developed as a front-end for the Ingestion Service. This crucial tool will allow the platform administrator to perform essential management tasks without requiring code deployments. Its features will include the ability to add new source URLs, edit existing source configurations (e.g., update CSS selectors), temporarily pause scraping for a specific source, and view logs and error rates for each scraper.
+* Asynchronous Processing Pipeline: To ensure the ingestion process does not impact the performance or stability of the main application, it will be architected asynchronously. A message queue (e.g., RabbitMQ, Apache Kafka) will serve as a buffer and communication backbone between services.
+   1. The Ingestion Service's scrapers and parsers will act as producers, publishing raw, scraped article data as messages to the queue.
+   2. The Article Service will act as a consumer, pulling messages from the queue. Upon receiving a message, it will perform final data validation, normalization (e.g., standardizing date formats), and deduplication. Deduplication will be primarily based on the canonical article_url, with a secondary check using a hash of the headline and snippet to catch articles syndicated across different URLs.
+   3. Once processed, the clean data is persisted to the database. This decoupled architecture ensures that a spike in scraping activity or a temporary database outage does not cause data loss, as unprocessed articles will remain safely in the queue.
+2.3. Database Schema and Data Model
+The data storage strategy will employ a hybrid model to leverage the strengths of different database technologies, ensuring both data integrity and high-performance querying capabilities. A relational database (PostgreSQL is recommended) will be used as the primary store for structured, transactional data, where relationships and consistency are critical. This includes user accounts, sources, journalists, and engagement data. A NoSQL document store (Elasticsearch is recommended) will be used to index article content (headline and snippet) to power the platform's fast, full-text search functionality.
+The following schema defines the core relational tables in the PostgreSQL database. This schema is the foundational data model of the entire application, designed to capture all necessary information derived from the project requirements and to support the advanced algorithmic features.
+Table 1: Core Database Schema (PostgreSQL)
+Table Name
+	Column Name
+	Data Type
+	Constraints/Notes
+	users
+	user_id
+	SERIAL
+	Primary Key
+	
+
+	username
+	VARCHAR(50)
+	UNIQUE, NOT NULL
+	
+
+	email
+	VARCHAR(255)
+	UNIQUE, NOT NULL
+	
+
+	password_hash
+	VARCHAR(255)
+	NOT NULL
+	
+
+	created_at
+	TIMESTAMP
+	DEFAULT CURRENT_TIMESTAMP
+	sources
+	source_id
+	SERIAL
+	Primary Key
+	
+
+	name
+	VARCHAR(100)
+	UNIQUE, NOT NULL
+	
+
+	base_url
+	VARCHAR(255)
+	UNIQUE, NOT NULL
+	
+
+	logo_url
+	VARCHAR(255)
+	
+
+	
+
+	affiliation
+	ENUM
+	('State', 'Independent', 'Diaspora', 'Business', 'Other'), NOT NULL
+	
+
+	credibility_score
+	SMALLINT
+	CHECK (credibility_score >= 0 AND credibility_score <= 100)
+	journalists
+	journalist_id
+	SERIAL
+	Primary Key
+	
+
+	full_name
+	VARCHAR(100)
+	NOT NULL
+	
+
+	source_id
+	INTEGER
+	Foreign Key to sources.source_id
+	
+
+	profile_image_url
+	VARCHAR(255)
+	
+
+	
+
+	trust_score
+	FLOAT
+	Updated periodically by the Ranking Service.
+	
+
+	total_upvotes
+	INTEGER
+	DEFAULT 0
+	categories
+	category_id
+	SERIAL
+	Primary Key
+	
+
+	name
+	VARCHAR(50)
+	UNIQUE, NOT NULL (e.g., 'Politics', 'Business', 'Sport')
+	articles
+	article_id
+	SERIAL
+	Primary Key
+	
+
+	headline
+	TEXT
+	NOT NULL
+	
+
+	url
+	VARCHAR(2048)
+	UNIQUE, NOT NULL
+	
+
+	snippet
+	TEXT
+	
+
+	
+
+	image_url
+	VARCHAR(2048)
+	
+
+	
+
+	source_id
+	INTEGER
+	Foreign Key to sources.source_id
+	
+
+	journalist_id
+	INTEGER
+	Foreign Key to journalists.journalist_id
+	
+
+	category_id
+	INTEGER
+	Foreign Key to categories.category_id
+	
+
+	published_at
+	TIMESTAMP
+	NOT NULL
+	
+
+	scraped_at
+	TIMESTAMP
+	DEFAULT CURRENT_TIMESTAMP
+	
+
+	trending_score
+	FLOAT
+	Updated frequently by the Ranking Service.
+	votes
+	vote_id
+	SERIAL
+	Primary Key
+	
+
+	user_id
+	INTEGER
+	Foreign Key to users.user_id
+	
+
+	article_id
+	INTEGER
+	Foreign Key to articles.article_id
+	
+
+	vote_type
+	ENUM
+	('upvote', 'like'), NOT NULL
+	
+
+	created_at
+	TIMESTAMP
+	DEFAULT CURRENT_TIMESTAMP
+	
+
+	
+
+	UNIQUE
+	(user_id, article_id, vote_type)
+	shares
+	share_id
+	SERIAL
+	Primary Key
+	
+
+	user_id
+	INTEGER
+	Foreign Key to users.user_id (Can be NULL for anonymous shares)
+	
+
+	article_id
+	INTEGER
+	Foreign Key to articles.article_id
+	
+
+	platform
+	VARCHAR(50)
+	(e.g., 'Facebook', 'Twitter', 'WhatsApp', 'LinkCopy')
+	
+
+	created_at
+	TIMESTAMP
+	DEFAULT CURRENT_TIMESTAMP
+	2.4. API Specifications (RESTful)
+The RESTful API serves as the formal contract between the front-end clients and the back-end microservices. A well-defined API is critical for enabling parallel development, as front-end and back-end teams can build and test against this shared specification. All endpoints will be consolidated under the API Gateway.
+Table 2: API Endpoints
+Endpoint
+	HTTP Method
+	Description
+	Request Body
+	Response (Success: 200/201)
+	/api/users/register
+	POST
+	Creates a new user account.
+	{ "username": "...", "email": "...", "password": "..." }
+	{ "user_id": 1, "username": "...", "email": "..." }
+	/api/users/login
+	POST
+	Authenticates a user.
+	{ "email": "...", "password": "..." }
+	{ "token": "jwt.token.string" }
+	/api/feed/trending
+	GET
+	Retrieves the list of trending articles, sorted by trending_score.
+	(None)
+	[ { "article_id":..., "headline":...,... } ]
+	/api/feed/category/{id}
+	GET
+	Retrieves articles for a specific category, sorted by published_at.
+	(None)
+	[ { "article_id":..., "headline":...,... } ]
+	/api/articles/{id}
+	GET
+	Retrieves full details for a single article.
+	(None)
+	{ "article_id":..., "headline":..., "snippet":... }
+	/api/articles/{id}/vote
+	POST
+	Submits a vote for an article. Requires authentication.
+	{ "vote_type": "upvote" }
+	{ "status": "success", "new_total_upvotes": 15 }
+	/api/articles/{id}/share
+	POST
+	Logs that an article has been shared.
+	{ "platform": "twitter" }
+	{ "status": "success" }
+	/api/journalists
+	GET
+	Retrieves a list of all journalists.
+	(None)
+	[ { "journalist_id":..., "full_name":..., "trust_score":... } ]
+	/api/journalists/{id}
+	GET
+	Retrieves a journalist's profile and their articles.
+	(None)
+	{ "journalist_id":..., "full_name":..., "articles": [...] }
+	/api/sources
+	GET
+	Retrieves a list of all news sources.
+	(None)
+	[ { "source_id":..., "name":..., "affiliation":... } ]
+	/api/search
+	GET
+	Performs a full-text search. Query param: ?q=...
+	(None)
+	[ { "article_id":..., "headline":..., "snippet_highlight":... } ]
+	3. Core Product Features and User Stories
+3.1. User Authentication and Profiles
+User Story: As a new user, I want to create an account easily using my email and a password, so that I can vote on articles, save them for later, and help shape the platform's content rankings.
+To fulfill this, the platform will provide a secure and streamlined user authentication system. The registration process will require a unique username, a valid email address, and a strong password. Upon submission, the system will hash the password using a modern, robust algorithm like bcrypt before storing it in the users table to ensure user credentials are never stored in plaintext. The login process will validate credentials against the stored hash and, upon success, will issue a JSON Web Token (JWT). This token will be sent with subsequent authenticated requests in the Authorization header, allowing the API Gateway to verify user identity for protected actions like voting. Each registered user will have a basic profile page, accessible only to them, where they can view their activity history, such as articles they have upvoted or liked.
+3.2. The News Feed Experience
+User Story: As a reader, I want to visit the homepage and immediately see a visually engaging, continuously scrolling feed of the most important and talked-about news, so I can quickly get up to speed without having to click around.
+The main landing page of the website (/) will be the central hub of the user experience, displaying the "Trending" news feed by default. This feed will be populated by articles sorted according to the TrendingScore calculated by the back-end service. The presentation will be a modern, card-based layout inspired by the visual appeal and information density of platforms like Flipboard.
+Each article card will be a self-contained summary, designed for quick scanning, and will prominently feature:
+* A high-quality image_url.
+* The full headline.
+* The source_name and its corresponding logo_url for immediate source identification.
+* The journalist_name, which will be a clickable link to their dedicated page.
+* The published_at date, formatted for readability (e.g., "4 hours ago").
+* Live counts of upvotes and likes to provide social proof.
+* The interactive engagement buttons (Like, Upvote, Share).
+To ensure a fluid and seamless browsing experience, the feed will implement "infinite scroll" with lazy loading. As the user scrolls towards the bottom of the page, an API request will be triggered to fetch the next batch of articles, which will then be appended to the feed, eliminating the need for traditional pagination.
+3.3. Content Discovery: Categories and Search
+User Story: As a user specifically interested in technology and business news, I want to easily navigate to dedicated sections for these topics to see a focused stream of relevant articles, and I want to be able to search for specific terms like "lithium" or "EcoCash" when I need to.
+To facilitate focused content discovery, the platform will feature a clear and persistent main navigation bar. This bar will contain links to all major predefined news categories, such as 'Politics', 'Business', 'Sports', 'Technology', and 'Lifestyle'. Clicking on a category link will take the user to a dedicated category page (e.g., /category/business). These pages will display a reverse-chronological feed of all articles assigned to that category, providing an unfiltered view of the latest news on that topic.
+In addition to category browsing, a powerful search functionality is required. A prominent search bar will be present in the site's header, accessible from all pages. When a user enters a query and submits, the front-end will make a request to the /api/search?q={query} endpoint. This endpoint will be powered by an Elasticsearch index of the articles table, enabling fast, relevant, and fault-tolerant full-text search across article headlines and snippets. The search results page will display matching articles, highlighting the search terms within the snippets to provide context.
+3.4. User Engagement Suite
+User Story: As an engaged reader, when I see an article that I believe is exceptionally important or well-reported, I want to click an "Upvote" button to boost its visibility and signal its quality to the community. If I simply enjoy an article, I want to "Like" it. When I want to discuss it with my network, I want a simple way to "Share" it.
+The engagement suite is central to the platform's dynamic nature. Every article card will feature three distinct interaction buttons:
+* Like Button: A simple, low-friction way for users to express appreciation for an article.
+* Upvote Button: A higher-intent action signifying that the user finds the article to be of high importance, quality, or significance. Both likes and upvotes are crucial inputs for the Trending Score algorithm.
+* Share Button: Clicking this button will trigger a modal or pop-up menu providing several sharing options: direct links to post on major social platforms (Facebook, Twitter/X), a link to share via WhatsApp, and a "Copy Link" function for universal sharing.
+To participate in voting (liking or upvoting), a user must be logged in. The system will enforce a rule that a user can only perform each type of vote once per article (e.g., one like and one upvote). When a user clicks any of these buttons, a corresponding API call (/api/articles/{id}/vote or /api/articles/{id}/share) is made to the back-end. These events are logged in the votes or shares table and are also published to the message queue to be consumed by the Ranking & Analytics Service, ensuring that user engagement directly and immediately begins to influence the platform's dynamic scores.
+4. Advanced Algorithms and Scoring Systems
+4.1. The "Trending Score" Algorithm
+A sophisticated and nuanced ranking algorithm is essential to creating a dynamic and relevant "Trending" feed that accurately reflects the current news cycle. A simplistic approach, such as ranking by raw upvote count, is fundamentally flawed as it would allow older, highly-voted articles to perpetually dominate the homepage, failing to surface new and breaking stories. To address this, the platform will implement a hybrid algorithm that draws inspiration from the proven models of successful news aggregators like Hacker News and Reddit, balancing multiple factors to produce a "Trending Score".
+The core principle is to reward engagement while penalizing age. Hacker News's algorithm effectively implements time decay using a gravity component, ensuring that all stories eventually fall off the front page. Reddit's algorithm, on the other hand, often uses a logarithmic scale for votes, giving more weight to the initial burst of engagement and preventing a "rich get richer" scenario where articles with a large lead become unassailable.
+Our proposed algorithm synthesizes these concepts. It defines an article's "Points" not just by upvotes, but as a weighted sum of multiple engagement signals, creating a more holistic measure of its impact. This score is then divided by a time-decay factor, ensuring freshness is a key component of the final rank.
+The proposed formula for the TrendingScore is:
+\text{TrendingScore} = \frac{(w_{up} \times \text{Upvotes}) + (w_{like} \times \text{Likes}) + (w_{share} \times \text{Shares}) - \text{Downvotes}}{(\text{TimeSincePublicationInHours} + 2)^{G}}
+Where:
+* Upvotes, Likes, Shares: The raw counts of each engagement type for the article.
+* w_{up}, w_{like}, w_{share}: Configurable weights that determine the relative importance of each engagement type. This allows for administrative tuning. An initial recommended configuration is w_{up}=2, w_{like}=1, and w_{share}=3, reflecting the higher intent of an upvote and the amplification effect of a share.
+* Downvotes: A placeholder for a future downvoting feature to penalize low-quality or controversial content. This will be initialized to 0.
+* TimeSincePublicationInHours: The elapsed time in hours since the article's original publication timestamp. This is the core of the time-decay function.
+* G (Gravity): A constant that controls the rate of decay. A higher value of G means articles lose their score more quickly. Drawing from the Hacker News model, an initial value of G = 1.8 is recommended.
+This calculation will be executed by the Ranking & Analytics Service. To ensure responsiveness, the score can be updated in near real-time in response to new engagement events, or recalculated for all recent articles on a periodic basis (e.g., every 15 minutes).
+4.2. The "Journalist Trust Score" Framework
+The user's request for a journalist score based on upvotes provides a starting point, but such a metric is fundamentally a measure of popularity, not trustworthiness. A journalist could achieve a high score by writing sensationalist or "clickbait" articles that garner many votes, while a journalist conducting rigorous, impactful, but less-trafficked investigative work would be unfairly penalized. This approach is vulnerable to manipulation and does not align with the platform's goal of promoting media literacy.
+To create a truly meaningful and defensible metric, the platform will implement a multi-faceted "Journalist Trust Score." This composite score moves beyond simple popularity by integrating objective criteria of journalistic practice, inspired by the frameworks of leading media-rating organizations like The Trust Project and NewsGuard. These organizations use transparent, apolitical criteria to assess credibility, such as whether an outlet has a corrections policy, discloses its ownership, and distinguishes news from opinion.
+Our framework will combine user-driven signals with source-level and content-level analysis. This creates a balanced score that rewards both audience approval and adherence to professional standards, making it a significant product differentiator. The Journalist Trust Score will be a weighted average of three components, calculated and updated periodically (e.g., daily) by the Ranking & Analytics Service.
+The proposed formula for the TrustScore is: \text{TrustScore} = (w_A \times A) + (w_B \times B) + (w_C \times C)
+Where the components are:
+* A: User Engagement Score (Normalized Upvotes): This component captures the audience's perception of a journalist's work. It is calculated as the journalist's average net upvotes (upvotes minus downvotes, if implemented) per article. To make it comparable across journalists with different publication volumes, this value is then normalized to a scale of 0-100. (Recommended weight w_A = 0.4)
+* B: Source Credibility Score: This component anchors the journalist's score to the general credibility of the publications they write for. Each source in the sources table will be assigned a baseline credibility_score (0-100) by an internal administrator, based on an objective assessment of criteria like ownership transparency, funding sources, and a public corrections policy. This component is the average credibility_score of the sources the journalist has published with. (Recommended weight w_B = 0.4)
+* C: Best Practices Score: This component algorithmically assesses the journalist's adherence to certain verifiable best practices within their articles. It is a score from 0-100, calculated based on factors such as:
+   * Citations: Positive points are awarded for articles that contain hyperlinks to external sources, indicating citation.
+   * Corrections: Negative points are applied if an article is flagged as having received a significant correction.
+   * Originality: (Future enhancement) Integration with a text-matching tool could be used to check for plagiarism or excessive republication without attribution. ** (Recommended weight w_C = 0.2)**
+This composite score provides a far more robust, nuanced, and credible measure of "trust" than a simple vote tally, establishing a key feature that promotes quality journalism on the platform.
+5. The Journalist & Source Ecosystem
+5.1. Journalist Pages
+To provide transparency and build a following for individual content creators, the platform will generate a unique, shareable profile page for every journalist in the system (e.g., /journalist/lance-guma). These pages will serve as a central portfolio for each journalist's work aggregated by the platform.
+The page will feature a prominent header containing the journalist's full name, a profile photo (if available), and their primary affiliated news source(s). Critically, their dynamic TrustScore will be clearly displayed, along with a tooltip or link that explains the components of the score, fostering transparency with the user base. Below this profile section, the page will display a reverse-chronological feed of all articles attributed to that journalist, presented in the same card format as the main news feeds. This allows users to easily explore the entire body of a journalist's work, assess their areas of expertise, and follow their reporting over time.
+5.2. Source Pages
+In a similar vein, each news source will have its own dedicated landing page (e.g., /source/the-herald). These pages are essential for users who wish to view content from a specific publication or understand its overall stance and contribution to the news landscape.
+The source page will display the publication's name, logo, and a brief, neutrally-worded description. This description will include the source's affiliation (e.g., 'State', 'Independent', 'Diaspora'), providing immediate context to the user about the outlet's perspective. The main body of the page will consist of a reverse-chronological feed of all articles scraped from that particular source. This feature allows users to bypass the main trending algorithm and consume news directly from their preferred or trusted publications.
+5.3. Initial Content Seeding
+A successful launch requires the platform to be populated with a critical mass of content from day one. A user visiting an empty aggregator will not return. Therefore, the Ingestion Service must be pre-configured with a prioritized list of Zimbabwean news sources to scrape immediately upon deployment. This initial list has been compiled based on extensive research into the most prominent and frequently cited news outlets in Zimbabwe. The categorization of these sources by affiliation is a crucial first step in populating the database with the metadata required for the platform's advanced filtering and scoring features.
+Table 3: Initial Zimbabwean News Sources for Scraping
+Source Name
+	URL
+	Type
+	Affiliation
+	Initial Priority
+	The Herald
+	www.herald.co.zw
+	Print/Digital
+	State
+	High
+	NewsDay
+	www.newsday.co.zw
+	Print/Digital
+	Independent
+	High
+	Daily News
+	www.dailynews.co.zw
+	Print/Digital
+	Independent
+	High
+	The Chronicle
+	www.chronicle.co.zw
+	Print/Digital
+	State
+	High
+	New Zimbabwe
+	www.newzimbabwe.com
+	Digital
+	Diaspora
+	High
+	The Zimbabwe Independent
+	www.theindependent.co.zw
+	Print/Digital
+	Business/Independent
+	High
+	The Standard
+	www.thestandard.co.zw
+	Print/Digital
+	Independent
+	High
+	Financial Gazette
+	(URL to be verified)
+	Print/Digital
+	Business
+	High
+	Sunday Mail
+	www.sundaymail.co.zw
+	Print/Digital
+	State
+	High
+	ZimEye
+	www.zimeye.net
+	Digital
+	Diaspora
+	Medium
+	Bulawayo24
+	bulawayo24.com
+	Digital
+	Independent
+	Medium
+	The Zimbabwe Mail
+	www.thezimbabwemail.com
+	Digital
+	Independent
+	Medium
+	iHarare
+	iharare.com
+	Digital
+	Independent
+	Medium
+	Nehanda Radio
+	nehandaradio.com
+	Digital
+	Diaspora
+	Medium
+	Manica Post
+	www.manicapost.co.zw
+	Print/Digital
+	State
+	Low
+	Masvingo Mirror
+	(URL to be verified)
+	Print/Digital
+	Independent
+	Low
+	Soccer24
+	www.soccer24.co.zw
+	Digital
+	Sports
+	Low
+	Note: This list is based on sources identified in research and should be continuously expanded post-launch.
+6. Business Viability: Monetization and Growth
+6.1. Monetization Strategy
+A sustainable business model is critical for the long-term success and independence of the platform. The monetization strategy must be carefully designed to generate revenue without alienating the user base or compromising the platform's core value proposition of trustworthiness. In emerging markets, audiences can be particularly sensitive to paywalls, especially when free alternatives are abundant. Therefore, a phased approach is recommended, prioritizing user acquisition and engagement initially, and introducing premium offerings only after a loyal community has been established.
+This strategy directly connects monetization to the platform's unique features, creating a clear and compelling value proposition for users to upgrade.
+* Phase 1 (Launch - 6 Months): Programmatic Advertising The initial revenue stream will be based on programmatic advertising. This model allows for immediate revenue generation with minimal friction for the user. The platform will integrate with an ad network like Google AdSense or a more advanced header bidding provider (e.g., AdPushup, Playwire) to automatically sell ad inventory. The system will utilize Real-Time Bidding (RTB) in an open marketplace to maximize competition and revenue for standard ad slots. Ad placements will include standard display banners and less intrusive native ads that blend with the content's format. The primary goal in this phase is to grow the audience (MAU) and increase on-site engagement (average session duration), as these metrics directly drive higher advertising revenue (eCPMs).
+* Phase 2 (6+ Months): Freemium Subscription Model Once a stable and engaged user base is established, the platform will introduce a "Freemium" subscription model. The core news aggregation service will remain free and ad-supported, ensuring the platform remains accessible to the widest possible audience. A premium subscription tier, "Zim Top News Pro," will be introduced, offering a suite of enhanced features for power users. This approach avoids the high barrier of a hard paywall while creating a clear upgrade path. "Zim Top News Pro" Features will include:
+   * Ad-Free Experience: Complete removal of all display and native advertising.
+   * Advanced Filtering & Analytics: Access to a personal dashboard with advanced tools, such as the ability to filter the news feed by source affiliation ('State' vs. 'Independent'), and view historical trend data for topics or journalists.
+   * Personalized Alerts: The ability to "follow" specific journalists, sources, or keywords and receive real-time email or push notifications for new articles.
+   * Unlimited Saved Articles: The ability to save an unlimited number of articles for later reading.
+* Phase 3 (Future Growth): Data & API Monetization As the platform matures and its database of aggregated and analyzed news grows, a significant asset will be the data itself. A future revenue stream will involve offering paid API access to this data for institutional clients. This B2B model targets researchers, financial analysts, media monitoring agencies, and NGOs who require structured, historical data on the Zimbabwean news landscape. This model is similar to those successfully employed by services like NewsAPI and Newscatcher, which cater to developers and data science teams.
+6.2. Key Performance Indicators (KPIs)
+To effectively measure the success of the platform and guide strategic decision-making, a set of clear, measurable Key Performance Indicators (KPIs) must be tracked from launch. These KPIs are divided into three core areas: User Engagement, Platform Health, and Business Growth. They will provide a comprehensive dashboard for the product owner and stakeholders to monitor performance against goals.
+Table 4: Platform Key Performance Indicators (KPIs)
+Category
+	Key Performance Indicator (KPI)
+	Metric
+	Goal (Year 1)
+	Primary Tool/Source
+	User Engagement
+	Monthly Active Users (MAU)
+	Count of unique users logging in per month
+	10,000
+	Internal DB / Google Analytics
+	
+
+	Average Session Duration
+	Average time a user spends on the site per session
+	> 3 minutes
+	Google Analytics
+	
+
+	Pages per Session
+	Average number of pages viewed per session
+	> 4
+	Google Analytics
+	
+
+	Engagement Rate
+	(Total Likes + Upvotes + Shares) / Unique Article Views
+	Increase 15% Quarter-over-Quarter
+	Internal Database
+	
+
+	Bounce Rate
+	Percentage of single-page sessions
+	< 40%
+	Google Analytics
+	Platform Health
+	API Response Time (p95)
+	95th percentile latency for all API endpoints
+	< 200 ms
+	Prometheus / Grafana
+	
+
+	Page Load Speed (LCP)
+	Largest Contentful Paint for main feed
+	< 2.5 seconds
+	Google PageSpeed Insights
+	
+
+	System Uptime
+	Percentage of time the platform is available
+	99.9%
+	Uptime Monitoring Service
+	Business Growth
+	Ad Revenue (eCPM)
+	(Total Ad Earnings / Total Impressions) * 1000
+	Continual Optimization
+	Ad Network Dashboard
+	
+
+	Subscriber Conversion Rate
+	(New Pro Subscribers / MAU) * 100
+	1% (post-Pro launch)
+	Payment Gateway / Internal DB
+	
+
+	Customer Acquisition Cost (CAC)
+	Total marketing spend / Number of new users
+	Establish baseline in first 6 months
+	Marketing Analytics
+	7. Non-Functional Requirements (NFRs)
+Non-Functional Requirements define the quality attributes and operational standards of the system. They are as critical as functional requirements for ensuring a positive user experience and a robust, reliable platform.
+7.1. Performance & Scalability
+* Performance: The system must deliver a fast and fluid user experience. This is critical for user retention, as slow-loading sites have high abandonment rates.
+   * Page Load Time: The Largest Contentful Paint (LCP) for the main news feed and other key pages must be under 2.5 seconds under typical load conditions.
+   * API Latency: All user-facing API endpoints must have a 95th percentile (p95) response time of less than 200 milliseconds.
+   * Interaction Response: The time from a user clicking a button (e.g., upvote) to seeing a visual confirmation on the UI must be under 100 milliseconds.
+* Scalability: The architecture must support growth without performance degradation.
+   * User Load: The system must be designed to handle an initial load of 10,000 concurrent users and must be able to scale horizontally to support over 100,000 concurrent users in the future. The microservices architecture is the primary strategy to achieve this.
+   * Data Volume: The database and ingestion pipeline must be capable of processing and storing up to 10,000 new articles per day without bottlenecks.
+7.2. Availability & Reliability
+* Availability: The platform must be consistently accessible to users.
+   * User-facing components (the website, API Gateway, User Service, Feed Service) must maintain a minimum of 99.9% uptime ("three nines"), which translates to no more than 8.77 hours of downtime per year.
+   * Back-end processing components (Ingestion Service, Ranking & Analytics Service) can have a slightly lower availability target of 99.5%, as their temporary downtime will not prevent users from accessing already-cached content.
+* Reliability: The system must be resilient to failures.
+   * Fault Tolerance: The failure of a single non-critical microservice must not cause a catastrophic failure of the entire platform. The system should degrade gracefully. For example, if the Ranking & Analytics Service is down, the Feed Service should automatically fall back to displaying a simple reverse-chronological list of articles instead of a ranked feed.
+   * Data Integrity: All database transactions, especially those related to user accounts and votes, must be ACID-compliant to prevent data corruption or loss.
+7.3. Security
+* Data Protection: The security of user data is paramount.
+   * All data transmission between the client and server must be encrypted using TLS (HTTPS).
+   * All sensitive user data, particularly password_hash in the users table, must be encrypted at rest.
+   * The system must comply with general data protection principles, ensuring user data is not shared without consent.
+* Application Security: The platform must be protected against common web vulnerabilities.
+   * All user inputs must be validated and sanitized on both the client and server sides to prevent Cross-Site Scripting (XSS) and SQL Injection attacks.
+   * The platform must implement Cross-Site Request Forgery (CSRF) protection on all state-changing forms.
+   * API keys and other system secrets must be stored securely (e.g., using a service like AWS Secrets Manager or HashiCorp Vault) and never be exposed on the client-side.
+* Scraping Ethics: The Ingestion Service must be a responsible web citizen.
+   * It must be programmed to respect the robots.txt file of all target websites.
+   * It must implement configurable rate-limiting and use appropriate User-Agent strings to avoid overwhelming source servers or being perceived as a malicious bot.
+7.4. Usability & Accessibility
+* Usability: The user interface (UI) and user experience (UX) must be intuitive, efficient, and satisfying for the target audience.
+   * Learnability: A new user should be able to understand the main functions of the site (browsing, voting, sharing) without instruction.
+   * Efficiency: The number of clicks required to perform common tasks (e.g., finding business news, sharing an article) should be minimized.
+   * Responsiveness: The website design must be fully responsive, providing an optimal viewing and interaction experience across a wide range of devices, from desktops to mobile phones.
+* Accessibility: The platform must be usable by people with disabilities.
+   * The website must adhere to the Web Content Accessibility Guidelines (WCAG) 2.1 at the AA conformance level. This includes requirements for providing text alternatives for non-text content, ensuring content is navigable via keyboard, providing sufficient color contrast, and making all functionality understandable and robust.
+Works cited
+1. www.w3newspapers.com, https://www.w3newspapers.com/zimbabwe/ 2. Zimbabwe News and Newspapers Online - Guides, https://guides.library.stanford.edu/zimbabwenews-newspapers 3. NewZimbabwe.com – The Zimbabwe News You Trust, https://www.newzimbabwe.com/ 4. The 5 best news apps in 2025 - Zapier, https://zapier.com/blog/best-news-apps/ 5. Top 8 Best News Aggregator Sites for Easy News Access - White Label Agency, https://thewhitelabelagency.com/news-aggregator-sites/ 6. 6 Best News Aggregators for Staying Informed - Mission to Learn, https://missiontolearn.com/news-aggregators/ 7. The Zimbabwe Mail – Leading Zimbabwe Daily News, https://www.thezimbabwemail.com/ 8. Monolith Versus Microservices: Weigh the Pros and Cons of Both Configs | Akamai, https://www.akamai.com/blog/cloud/monolith-versus-microservices-weigh-the-difference 9. Microservices vs. monolithic architecture - Atlassian, https://www.atlassian.com/microservices/microservices-architecture/microservices-vs-monolith 10. Monolith vs microservices: Comparing architectures for software delivery - Chronosphere, https://chronosphere.io/learn/comparing-monolith-and-microservice-architectures-for-software-delivery/ 11. Monolithic vs Microservices: What's the Difference? | Kong Inc., https://konghq.com/blog/learning-center/monolith-vs-microservices 12. Monolithic vs. Microservices Architecture: System design(Part-17) | by Kiran vutukuri, https://medium.com/@kiranvutukuri/monolithic-vs-microservices-architecture-system-design-part-17-5205f020e6b3 13. System design and site architecture for a News media app - FastPix, https://www.fastpix.io/blog/system-design-and-site-architecture-for-a-news-media-app 14. Monolithic vs. Microservices Architecture - IBM, https://www.ibm.com/think/topics/monolithic-vs-microservices 15. How to Build a News Aggregator with Python - Zencoder, https://zencoder.ai/blog/how-to-build-a-news-aggregator-with-python 16. News API – Search News and Blog Articles on the Web, https://newsapi.org/ 17. How to Build a Powerful News Aggregator Using APIs - Digital Hill Multimedia, Inc., https://www.digitalhill.com/blog/how-to-build-a-powerful-news-aggregator-using-apis/ 18. Design A News Feed System - ByteByteGo | Technical Interview Prep, https://bytebytego.com/courses/system-design-interview/design-a-news-feed-system 19. News Aggregator System Design - Medium, https://medium.com/@akhmadreiza/news-aggregator-system-design-8a036f0f048b 20. System Design: News Feed System. Today, I would like to share how… | by Ishwarya Hidkimath | Medium, https://medium.com/@ishwarya1011.hidkimath/system-design-feedback-system-88a67b81a8b3 21. How Hacker News ranking really works: scoring, controversy, and ..., http://www.righto.com/2013/11/how-hacker-news-ranking-really-works.html 22. Can you explain how does reddit's ranking algorithm work? What are it's pros and cons?, https://www.reddit.com/r/computerscience/comments/ob06k1/can_you_explain_how_does_reddits_ranking/ 23. How Reddit ranking algorithms work | by Amir Salihefendic | Hacking and Gonzo - Medium, https://medium.com/hacking-and-gonzo/how-reddit-ranking-algorithms-work-ef111e33d0d9 24. That's close to the current version, but a little out of date. Here's the code r... - Hacker News, https://news.ycombinator.com/item?id=1781417 25. Reverse Engineering the Hacker News Ranking Algorithm, https://news.ycombinator.com/item?id=13867739 26. Reputation system - Wikipedia, https://en.wikipedia.org/wiki/Reputation_system 27. Hacker News Ranking Algorithm, https://news.ycombinator.com/item?id=35510413 28. Understanding Trust Indicators - The Trust Project, https://thetrustproject.org/trust-indicators/ 29. Website Rating Process and Criteria - NewsGuard, https://www.newsguardtech.com/ratings/rating-process-criteria/ 30. News Reliability Ratings - NewsGuard, https://www.newsguardtech.com/solutions/news-reliability-ratings/ 31. Zimbabwe Media Directory Maintained by EIN Presswire, https://www.einpresswire.com/world-media-directory/3/zimbabwe 32. The Zimbabwe Independent - The Leading Business Weekly, https://www.theindependent.co.zw/ 33. www.google.com, https://www.google.com/search?q=top+newspapers+in+Zimbabwe 34. The Standard - Best Sunday Read, https://www.thestandard.co.zw/ 35. Newsday Zimbabwe - EveryDay News For EveryDay People, https://www.newsday.co.zw/ 36. ZIMBABWE NEWS, ZIMEYE, https://www.zimeye.net/ 37. ZimLive.com I Zimbabwe News Leader - Zimbabwe News Now, https://www.zimlive.com/ 38. Monetizing Your Website: Effective Revenue Strategies for Local News Publishers | ReIntent, https://www.reintent.com/monetizing-your-website-effective-revenue-strategies-for-local-news-publishers/ 39. Scarcity-driven monetization of digital content - Frontiers, https://www.frontiersin.org/journals/research-metrics-and-analytics/articles/10.3389/frma.2022.995202/full 40. Monetization Tactics Every Media Publisher Should Implement - StorifyMe, https://www.storifyme.com/blog/monetization-tactics-every-media-publisher-should-implement 41. Programmatic Advertising 101: What Publishers Need to Know - Aditude, https://www.aditude.com/blog/programmatic-advertising-101-what-publishers-need-to-know 42. Programmatic Advertising: What Publishers and Advertisers Need to Know - Playwire, https://www.playwire.com/programmatic-advertising-pillar 43. Programmatic Advertising for Publishers – A Beginner's Guide - Mile, https://www.mile.tech/blog/learn-programmatic 44. ultracommerce.co, https://ultracommerce.co/metered-paywall-vs-freemium-which-publishing-model-is-right-for-you/#:~:text=In%20a%20freemium%20model%2C%20publishers,and%20take%20advantage%20of%20them. 45. Payment models for digital newspapers - Purple, https://www.purplepublish.com/en/blog/von-micropayments-zu-mitgliedschaften 46. The 4 Best News Aggregation APIs in 2024 - Konfig, https://konfigthis.com/blog/news-aggregation/ 47. Top 8 Website KPIs to Track (Example & Templates) - DashThis, https://dashthis.com/blog/website-kpis/ 48. What are KPIs? Key Performance Indicators explained - Funnel.io, https://funnel.io/blog/what-are-kpis 49. Functional vs Non-Functional Requirements: Ultimate Guide - Jelvix, https://jelvix.com/blog/functional-vs-nonfunctional-requirements 50. Nonfunctional Requirements — The Secret Sauce of a Successful Project Delivery - Material, https://www.materialplus.io/perspectives/nonfunctional-requirements-the-secret-sauce-of-a-successful-project-delivery 51. Top 8 Website KPIs for Measuring Your Performance (And ROI) - WebFX, https://www.webfx.com/blog/marketing/website-kpis/ 52. Non-Functional Requirements: Tips, Tools, and Examples | Perforce Software, https://www.perforce.com/blog/alm/what-are-non-functional-requirements-examples 53. How do you come up with non functional requirements : r/ProductManagement - Reddit, https://www.reddit.com/r/ProductManagement/comments/18mtsfa/how_do_you_come_up_with_non_functional/ 54. Nonfunctional Requirements: Examples, Types and Approaches - AltexSoft, https://www.altexsoft.com/blog/non-functional-requirements/ 55. Build Your Own News Aggregator API, https://projects.masteringbackend.com/projects/build-your-own-news-aggregator-api

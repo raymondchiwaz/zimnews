@@ -1,0 +1,183 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SourceAffiliation {
+  STATE
+  INDEPENDENT
+  DIASPORA
+  BUSINESS
+  OTHER
+}
+
+enum VoteType {
+  UPVOTE
+  LIKE
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  votes  Vote[]
+  shares Share[]
+
+  @@map("users")
+}
+
+model Source {
+  id               String            @id @default(cuid())
+  name             String            @unique
+  baseUrl          String            @unique @map("base_url")
+  logoUrl          String?           @map("logo_url")
+  affiliation      SourceAffiliation
+  credibilityScore Int?              @map("credibility_score") @db.SmallInt
+  isActive         Boolean           @default(true) @map("is_active")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  articles    Article[]
+  journalists Journalist[]
+
+  @@map("sources")
+}
+
+model Journalist {
+  id              String  @id @default(cuid())
+  fullName        String  @map("full_name")
+  profileImageUrl String? @map("profile_image_url")
+  trustScore      Float?  @map("trust_score")
+  totalUpvotes    Int     @default(0) @map("total_upvotes")
+  sourceId        String  @map("source_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  source   Source    @relation(fields: [sourceId], references: [id])
+  articles Article[]
+
+  @@map("journalists")
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  articles Article[]
+
+  @@map("categories")
+}
+
+model Article {
+  id           String    @id @default(cuid())
+  headline     String
+  url          String    @unique
+  snippet      String?
+  imageUrl     String?   @map("image_url")
+  content      String?   // Full article content if scraped
+  publishedAt  DateTime  @map("published_at")
+  scrapedAt    DateTime  @default(now()) @map("scraped_at")
+  trendingScore Float?   @map("trending_score")
+  viewCount    Int       @default(0) @map("view_count")
+  
+  // Foreign keys
+  sourceId      String @map("source_id")
+  journalistId  String? @map("journalist_id")
+  categoryId    String @map("category_id")
+
+  // Relations
+  source     Source      @relation(fields: [sourceId], references: [id])
+  journalist Journalist? @relation(fields: [journalistId], references: [id])
+  category   Category    @relation(fields: [categoryId], references: [id])
+  votes      Vote[]
+  shares     Share[]
+
+  @@map("articles")
+}
+
+model Vote {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  articleId String   @map("article_id")
+  voteType  VoteType @map("vote_type")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id])
+  article Article @relation(fields: [articleId], references: [id])
+
+  // Ensure unique vote per user per article per type
+  @@unique([userId, articleId, voteType])
+  @@map("votes")
+}
+
+model Share {
+  id        String   @id @default(cuid())
+  userId    String?  @map("user_id") // Can be null for anonymous shares
+  articleId String   @map("article_id")
+  platform  String   // 'facebook', 'twitter', 'whatsapp', 'link'
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user    User?   @relation(fields: [userId], references: [id])
+  article Article @relation(fields: [articleId], references: [id])
+
+  @@map("shares")
+}
+
+// Search and analytics tables
+model SearchQuery {
+  id        String   @id @default(cuid())
+  query     String
+  userId    String?  @map("user_id")
+  results   Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("search_queries")
+}
+
+model ArticleView {
+  id        String   @id @default(cuid())
+  articleId String   @map("article_id")
+  userId    String?  @map("user_id")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("article_views")
+}
+
+// Scraping configuration
+model ScrapingSource {
+  id           String   @id @default(cuid())
+  sourceId     String   @map("source_id")
+  url          String
+  type         String   // 'rss', 'html', 'api'
+  selectors    Json?    // CSS selectors for HTML scraping
+  isActive     Boolean  @default(true) @map("is_active")
+  lastScraped  DateTime? @map("last_scraped")
+  errorCount   Int      @default(0) @map("error_count")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("scraping_sources")
+} 
