@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Zim News App Icon</title>
+  <desc id="desc">Gradient square with dynamic Z path and radiating signal arcs</desc>
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="zBody" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFD100"/>
+      <stop offset="40%" stop-color="#DE2010"/>
+      <stop offset="80%" stop-color="#009639"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="18" result="b" />
+      <feMerge>
+        <feMergeNode in="b" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <radialGradient id="pulse" cx="0.8" cy="0.22" r="0.5">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.6"/>
+      <stop offset="60%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="220" fill="url(#bg2)" />
+  <circle cx="820" cy="200" r="140" fill="url(#pulse)"/>
+  <g filter="url(#glow)">
+    <path d="M256 250h520c16 0 23 20 11 30L470 640h294c20 0 28 26 12 38l-122 96H256c-18 0-28-22-16-35l352-360H272c-24 0-34-30-16-46l64-63Z" fill="url(#zBody)"/>
+  </g>
+  <g stroke="#ffffff" stroke-width="20" stroke-linecap="round" stroke-opacity="0.55" fill="none">
+    <path d="M820 200c60 14 108 62 122 122" />
+    <path d="M820 200c90 20 162 92 182 182" stroke-opacity="0.35" />
+  </g>
+</svg>

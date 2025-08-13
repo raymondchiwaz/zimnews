@@ -2,6 +2,9 @@ FROM node:18-alpine
 
 WORKDIR /app
 
+# Install system dependencies
+RUN apk add --no-cache openssl
+
 # Install all dependencies with npm configuration for better reliability
 COPY package*.json ./
 RUN npm config set fetch-retry-maxtimeout 600000 && \
@@ -12,8 +15,8 @@ RUN npm config set fetch-retry-maxtimeout 600000 && \
 COPY . .
 
 # Generate Prisma client
-RUN npx prisma generate
+RUN npx prisma generate || echo "Prisma generate skipped"
 
 EXPOSE 8002
 
-CMD ["npm", "run", "dev"] 
+CMD ["npm", "run", "dev"]

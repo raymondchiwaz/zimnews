@@ -20,6 +20,10 @@ const nextConfig = {
   async rewrites() {
     return [
       {
+        source: '/api/articles',
+        destination: 'http://article-service:8002/articles'
+      },
+      {
         source: '/api/:path*',
         destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/:path*`,
       },
@@ -48,4 +52,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig; 
+module.exports = nextConfig;
