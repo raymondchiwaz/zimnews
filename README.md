@@ -1,4 +1,23 @@
 # Zim News Aggregator
+## Recent Improvements
+
+This codebase has been enhanced with:
+- Centralized ESLint + Prettier config and root TypeScript project references
+- API Gateway hardening (regex-based protected route matching, graceful shutdown, env validation via Zod)
+- User Service basic auth endpoints (register/login/profile) with validation & password hashing
+- Article Service search endpoint and environment validation
+- Ingestion Service improved logging + environment validation
+- Added frontend search page, loading state for Latest, and improved UX skeletons
+- Introduced environment schema validation across services to fail fast on misconfiguration
+- Added initial Jest setup with sample health tests (api-gateway, user-service)
+- Per-route rate limiting (login/register/search) in API Gateway
+- Central structured logging (pino) with request IDs in gateway
+- Prometheus `/metrics` endpoints for gateway, user, article services
+- Prisma unified migration scripts (`migrate:all`, `migrate:dev:all`)
+- Contract proxy tests (gateway -> downstream) with nock
+
+See `SETUP.md` for updated development instructions.
+
 
 A comprehensive news aggregation platform for Zimbabwean media, featuring intelligent ranking algorithms, journalist trust scores, and real-time engagement features.
 
@@ -60,6 +79,32 @@ npm run dev:ranking
 ```
 
 ## 📋 Project Structure
+## Observability
+Expose metrics:
+```
+Gateway:        http://localhost:8000/metrics
+User Service:   http://localhost:8001/metrics
+Article Service:http://localhost:8002/metrics
+```
+Scrape with Prometheus, then visualize in Grafana.
+
+## Migrations
+Generate clients & deploy migrations (prod style):
+```
+npm run migrate:all
+```
+Iterative dev migrations (creates new migrations if schema changed):
+```
+npm run migrate:dev:all
+```
+
+## Rate Limiting
+- `/api/users/login`: 20 req / 10 min / IP
+- `/api/users/register`: 10 req / hour / IP
+- `/api/search`: 120 req / 15 min / IP
+
+## Logging
+Gateway uses `pino` (pretty in development). Each request gets `X-Request-ID` propagated downstream.
 
 ```
 zim-news-aggregator/

@@ -1,0 +1,21 @@
+{
+  "files": [],
+  "references": [
+    { "path": "frontend" },
+    { "path": "services/api-gateway" },
+    { "path": "services/user-service" },
+    { "path": "services/article-service" },
+    { "path": "services/ingestion-service" }
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "NodeNext",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "strict": false
+  }
+}

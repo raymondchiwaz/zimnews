@@ -9,12 +9,36 @@ import { createProxyMiddleware } from 'http-proxy-middleware';
 import { authMiddleware } from './middleware/auth';
 import { errorHandler } from './middleware/error';
 import { healthRouter } from './routes/health';
+import { validateEnv } from './utils/env';
+import { httpLogger, logger } from './utils/logger';
+import client from 'prom-client';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
+validateEnv();
 const PORT = process.env.PORT || 8000;
+
+// Prometheus metrics setup
+const collectDefaultMetrics = client.collectDefaultMetrics;
+collectDefaultMetrics();
+const httpRequestDuration = new client.Histogram({
+  name: 'gateway_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method','route','status'],
+  buckets: [0.05,0.1,0.2,0.3,0.5,0.8,1,2,5]
+});
+app.use((req, res, next) => {
+  const end = httpRequestDuration.startTimer();
+  res.on('finish', () => end({ method: req.method, route: req.route?.path || req.path, status: res.statusCode }));
+  next();
+});
+
+app.get('/metrics', async (_req, res) => {
+  res.set('Content-Type', client.register.contentType);
+  res.end(await client.register.metrics());
+});
 
 // Security middleware
 app.use(helmet());
@@ -28,22 +52,35 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-// Request logging
-app.use(morgan('combined'));
+// Structured logging
+app.use(httpLogger);
+if (process.env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+}
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
+// Global base limiter
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  standardHeaders: true,
+  legacyHeaders: false
+}));
+
+// Sensitive route specific limits
+const makeLimiter = (max: number, windowMs = 15 * 60 * 1000) => rateLimit({
+  windowMs,
+  max,
   standardHeaders: true,
   legacyHeaders: false,
+  message: 'Rate limit exceeded. Please slow down.'
 });
-app.use(limiter);
+app.use('/api/users/login', makeLimiter(20, 10 * 60 * 1000));
+app.use('/api/users/register', makeLimiter(10, 60 * 60 * 1000));
+app.use('/api/search', makeLimiter(120, 15 * 60 * 1000));
 
 // Health check route
 app.use('/health', healthRouter);
@@ -87,16 +124,18 @@ const serviceProxies = {
   }
 };
 
-// Apply authentication middleware to protected routes
-const protectedRoutes = [
-  '/api/articles/*/vote',
-  '/api/articles/*/share',
-  '/api/users/profile',
-  '/api/admin/*'
+// Apply authentication middleware to protected routes (wildcards handled via regex)
+const protectedPatterns = [
+  /^\/api\/articles\/.+\/vote$/,
+  /^\/api\/articles\/.+\/share$/,
+  /^\/api\/users\/profile$/,
+  /^\/api\/admin\//
 ];
-
-protectedRoutes.forEach(route => {
-  app.use(route, authMiddleware);
+app.use((req, res, next) => {
+  if (protectedPatterns.some(p => p.test(req.path))) {
+    return authMiddleware(req, res, next);
+  }
+  next();
 });
 
 // Set up service proxies
@@ -104,7 +143,7 @@ Object.entries(serviceProxies).forEach(([path, config]) => {
   app.use(path, createProxyMiddleware({
     ...config,
     onError: (err, req, res) => {
-      console.error(`Proxy error for ${path}:`, err);
+  logger.error({ err }, `Proxy error for ${path}`);
       res.status(503).json({
         error: 'Service temporarily unavailable',
         message: 'The requested service is currently unavailable. Please try again later.'
@@ -182,21 +221,22 @@ app.use('*', (req, res) => {
 app.use(errorHandler);
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`🚀 API Gateway running on port ${PORT}`);
-  console.log(`📚 API Documentation: http://localhost:${PORT}/api`);
-  console.log(`🏥 Health Check: http://localhost:${PORT}/health`);
+const server = app.listen(PORT, () => {
+  logger.info({ port: PORT }, 'API Gateway started');
+  logger.info({ url: `/api` }, 'API documentation route');
+  logger.info({ url: `/health` }, 'Health route');
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully...');
-  process.exit(0);
-});
+const shutdown = (signal: string) => {
+  logger.warn({ signal }, 'Shutdown signal received');
+  server.close(() => {
+    logger.info('HTTP server closed');
+    process.exit(0);
+  });
+  // Force exit after timeout
+  setTimeout(() => process.exit(1), 10000).unref();
+};
+['SIGTERM','SIGINT'].forEach(sig => process.on(sig as NodeJS.Signals, () => shutdown(sig)));
 
 export default app; 

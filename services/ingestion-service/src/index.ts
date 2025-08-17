@@ -1,12 +1,24 @@
 import express from 'express';
 import { XMLParser } from 'fast-xml-parser';
 import dotenv from 'dotenv';
+import { z } from 'zod';
 
 dotenv.config();
 
 const app = express();
 app.use(express.json());
 
+const envSchema = z.object({
+  PORT: z.string().optional(),
+  ARTICLE_SERVICE_URL: z.string().url().optional(),
+  INGEST_INTERVAL_MS: z.string().regex(/^\d+$/).optional(),
+  INGESTION_KEY: z.string().optional()
+});
+const parsedEnv = envSchema.safeParse(process.env);
+if (!parsedEnv.success) {
+  console.error('Invalid env configuration', parsedEnv.error.flatten().fieldErrors);
+  process.exit(1);
+}
 const PORT = process.env.PORT || 8004;
 const ARTICLE_SERVICE_URL = process.env.ARTICLE_SERVICE_URL || 'http://article-service:8002';
 const INGEST_INTERVAL_MS = parseInt(process.env.INGEST_INTERVAL_MS || '300000', 10); // 5m default
@@ -57,12 +69,13 @@ async function fetchRss(source: FeedSource) {
 }
 
 async function ingestOnce() {
-  console.log('Ingestion cycle start');
+  const started = Date.now();
+  console.log('[ingestion] cycle start');
   // shuffle sources to distribute load
   const shuffled = [...sources].sort(() => Math.random() - 0.5);
   const batches = await Promise.all(shuffled.map(fetchRss));
   const flat = batches.flat();
-  if (!flat.length) { console.log('No articles fetched'); return; }
+  if (!flat.length) { console.log('[ingestion] no articles fetched'); return; }
   try {
     const res = await fetch(`${ARTICLE_SERVICE_URL}/internal/articles/ingest`, {
       method: 'POST',
@@ -73,10 +86,11 @@ async function ingestOnce() {
       body: JSON.stringify(flat)
     });
     const data = await res.json();
-    console.log('Ingestion result', data);
+    console.log('[ingestion] result', data);
   } catch (e) {
-    console.error('Ingestion post error', e);
+    console.error('[ingestion] post error', e);
   }
+  console.log(`[ingestion] cycle end duration=${Date.now()-started}ms fetched=${flat.length}`);
 }
 
 // Jittered scheduling wrapper
@@ -88,7 +102,7 @@ function scheduleIngestion() {
 // Start loop (replace previous setInterval)
 scheduleIngestion();
 
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+app.get('/health', (_req, res) => res.json({ status: 'ok', intervalMs: INGEST_INTERVAL_MS }));
 
 app.listen(PORT, () => {
   console.log(`Ingestion service running on ${PORT}`);
