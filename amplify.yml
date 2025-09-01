@@ -2,14 +2,14 @@ version: 1
 applications:
   - appRoot: frontend
     frontend:
+      runtime-versions:
+        nodejs: 18
       phases:
         preBuild:
           commands:
-            - nvm install
-            - nvm use
-            - node -v
-            - npm -v
-            - npm install --no-audit --no-fund
+            - node -v || true
+            - npm -v || true
+            - npm ci || npm install --no-audit --no-fund
         build:
           commands:
             - npm run build
