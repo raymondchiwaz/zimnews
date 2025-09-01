@@ -5,6 +5,10 @@ applications:
       phases:
         preBuild:
           commands:
+            - nvm install
+            - nvm use
+            - node -v
+            - npm -v
             - npm install --no-audit --no-fund
         build:
           commands:
