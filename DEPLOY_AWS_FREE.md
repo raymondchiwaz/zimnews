@@ -24,7 +24,8 @@ This guide shows how to deploy the project for $0 using AWS free tier:
 
 ### 2) Connect via SSH
 ```bash
-ssh -i /path/to/your-key.pem ec2-user@<EC2_PUBLIC_DNS>
+
+
 ```
 
 ### 3) Install Docker and Docker Compose plugin
