@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Export static HTML for Amplify static hosting
+  output: 'export',
   images: {
+    unoptimized: true,
     domains: [
       'herald.co.zw',
       'newsday.co.zw',
@@ -17,18 +20,7 @@ const nextConfig = {
     dangerouslyAllowSVG: true,
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
-  async rewrites() {
-    return [
-      {
-        source: '/api/articles',
-        destination: 'http://article-service:8002/articles'
-      },
-      {
-        source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/:path*`,
-      },
-    ];
-  },
+  // Rewrites are ignored in static export; frontend calls API via NEXT_PUBLIC_API_URL directly
   async headers() {
     return [
       {
