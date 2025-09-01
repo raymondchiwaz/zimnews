@@ -1,20 +1,37 @@
+"use client";
+
 import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
-async function performSearch(q: string) {
-  if (!q) return [];
-  try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/search?q=${encodeURIComponent(q)}`, { cache: 'no-store' });
-    if (!res.ok) return [];
-    return await res.json();
-  } catch {
-    return [];
-  }
-}
+export default function SearchPage() {
+  const searchParams = useSearchParams();
+  const q = useMemo(() => (searchParams.get('q') || '').trim(), [searchParams]);
+  const [results, setResults] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const { q: rawQ = '' } = await searchParams;
-  const q = rawQ.trim();
-  const results = await performSearch(q);
+  useEffect(() => {
+    let cancelled = false;
+    async function run() {
+      if (!q) {
+        setResults([]);
+        return;
+      }
+      setLoading(true);
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/search?q=${encodeURIComponent(q)}`);
+        const data = res.ok ? await res.json() : [];
+        if (!cancelled) setResults(Array.isArray(data) ? data : []);
+      } catch {
+        if (!cancelled) setResults([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    run();
+    return () => { cancelled = true; };
+  }, [q]);
+
   return (
     <div className="container-custom py-10">
       <form className="mb-8 flex flex-wrap gap-3" action="/search" method="get">
@@ -22,7 +39,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         <button className="btn-primary px-4 py-2 text-sm" type="submit">Search</button>
       </form>
       {q && (
-        <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">{results.length} result(s) for <span className="font-medium">{q}</span></p>
+        <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">{loading ? 'Searching…' : `${results.length} result(s) for `}<span className="font-medium">{q}</span></p>
       )}
       <div className="space-y-4">
         {results.map((r: any) => (
@@ -32,7 +49,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             <div className="mt-2 text-xs text-gray-500">{r.source} • {new Date(r.publishedAt).toLocaleString()}</div>
           </div>
         ))}
-        {q && results.length === 0 && (
+        {q && !loading && results.length === 0 && (
           <div className="rounded border border-dashed p-8 text-center text-sm text-gray-500 dark:text-gray-400">No results yet. Try a different keyword.</div>
         )}
       </div>
