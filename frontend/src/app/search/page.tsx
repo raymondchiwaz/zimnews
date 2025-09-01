@@ -11,8 +11,9 @@ async function performSearch(q: string) {
   }
 }
 
-export default async function SearchPage({ searchParams }: { searchParams: { q?: string } }) {
-  const q = (searchParams.q || '').trim();
+export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const { q: rawQ = '' } = await searchParams;
+  const q = rawQ.trim();
   const results = await performSearch(q);
   return (
     <div className="container-custom py-10">
